@@ -11,7 +11,7 @@ drive E: yang isinya wiped total oleh `rd /s /q` yang mengikuti junction.
 | Bahasa | Python 3 (stdlib saja) + PowerShell |
 | Dependensi | Tidak ada (`ctypes` saja untuk raw disk read) |
 | Root | Admin / elevated shell wajib untuk akses `\\.\PhysicalDriveN` |
-| Lisensi | MIT (silakan tambah file `LICENSE` sendiri) |
+| Lisensi | MIT — lihat [`LICENSE`](LICENSE) |
 
 ## Kenapa skill ini ada
 
@@ -132,4 +132,4 @@ menelusuri junction ke root.
 
 ## Lisensi
 
-MIT — pakai bebas, ganti sesuai kebutuhan.
+MIT © 2026 Ansel Caprico — pakai bebas, ganti sesuai kebutuhan.
