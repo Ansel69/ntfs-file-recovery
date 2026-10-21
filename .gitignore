@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Recovery output (never commit recovered data)
+recovered/
+_recovered/
+*.vhd
+*.vhdx
+*.iso
+inventory*.json
+usn_*.csv
+_errors.log
+
+# Windows
+Thumbs.db
+desktop.ini
+*.lnk
+
+# Editors
+.vscode/
+.idea/
+*.swp
