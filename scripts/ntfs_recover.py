@@ -314,19 +314,36 @@ def build_paths(dead_files, dir_names, dir_parents, volume_root="C:"):
     for idx, pfrn, nm, alloc, real, data in dead_files:
         parent = path_of(pfrn)
         full = parent + "\\" + nm if parent else volume_root + "\\" + nm
-        # size: prefer the $DATA real size, then the run-list total, then $FILE_NAME
-        dsize = data[2] if (data and data[0] == "n") else None
-        if data and data[0] == "n":
-            run_bytes = sum(l * CLUSTER for _, l in data[1])
-        elif data and data[0] == "r":
-            run_bytes = data[2]
+        # Size: the $DATA real size is authoritative. The $FILE_NAME copy of the
+        # size can be stale or garbage on deleted records, so it is only used
+        # as a fallback and only when it lands in a plausible range.
+        dsize = data[2] if data else 0
+        if data and data[0] == "r":
+            dsize = data[2]
+        if dsize and 0 < dsize <= MAX_TOTAL_BYTES:
+            size = dsize
+        elif 0 < (real or 0) <= MAX_TOTAL_BYTES:
+            size = real
         else:
-            run_bytes = 0
-        size = real or dsize or run_bytes
+            size = 0
         out.append(dict(index=idx, path=full, name=nm, parent=pfrn,
-                        alloc=alloc, real=size, run_bytes=run_bytes,
+                        alloc=alloc, real=size, run_bytes=0,
                         name_size=real, data=data))
     return out
+
+
+def rel_path(path):
+    """Turn a recovered absolute path into a path relative to the volume root.
+
+    os.path.join(out_dir, "C:\\\\Program Files\\\\x") silently discards
+    out_dir, because the second argument carries its own drive. Strip the
+    drive and leading separator first so the output directory is always
+    honoured.
+    """
+    p = path.replace("/", "\\")
+    if len(p) > 1 and p[1] == ":":
+        p = p[2:]
+    return p.lstrip("\\")
 
 
 def extract(disk, geo, part_off, items, out_dir, verify=False, resume=True):
@@ -348,7 +365,10 @@ def extract(disk, geo, part_off, items, out_dir, verify=False, resume=True):
                 bad += 1
                 continue
             size = it["real"] or total
-        dest = os.path.join(out_dir, it["path"].replace("\\", os.sep))
+        dest = os.path.join(out_dir, rel_path(it["path"]))
+        if os.path.commonpath([os.path.abspath(dest), os.path.abspath(out_dir)]).lower() \
+                != os.path.abspath(out_dir).lower():
+            raise ValueError("refusing to write outside the output directory: %s" % dest)
         if resume and os.path.exists(dest) and os.path.getsize(dest) == size:
             skipped += 1
             continue
@@ -416,6 +436,12 @@ def main():
                     help="order by size descending (fastest to get the big files)")
     ap.add_argument("--verify", action="store_true", help="check magic bytes")
     ap.add_argument("--index-out", help="write the inventory as JSON")
+    ap.add_argument("--allow-source", action="store_true",
+                    help="permit writing to the source volume (in-place restore). "
+                         "The data is read from the same clusters that are being "
+                         "written, so the allocator must hand back the same "
+                         "clusters. Only use this when the goal is to put the "
+                         "files back where they were.")
     args = ap.parse_args()
 
     device, part_off = drive_to_device(args.drive)
@@ -468,8 +494,10 @@ def main():
             print("%12d  %s" % (it["real"] or 0, it["path"]))
         print("... %d total" % len(items))
     elif args.out:
-        if os.path.abspath(args.out).upper().startswith(args.drive.upper() + ":"):
-            raise SystemExit("refusing to write to the source volume")
+        same_volume = os.path.abspath(args.out).upper().startswith(args.drive.upper() + ":")
+        if same_volume and not args.allow_source:
+            raise SystemExit("refusing to write to the source volume "
+                             "(pass --allow-source for an in-place restore)")
         os.makedirs(args.out, exist_ok=True)
         ok, bad, skipped, written = extract(disk, geo, part_off, items, args.out,
                                            verify=args.verify)
